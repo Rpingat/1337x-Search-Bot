@@ -45,6 +45,7 @@ def authenticate_seedr():
         return response.json().get('access_token')
     else:
         logger.error("Failed to authenticate with Seedr.")
+        logger.error(f"Status Code: {response.status_code}, Response: {response.text}")
         return None
 
 def mirror_to_seedr(magnet_link):
