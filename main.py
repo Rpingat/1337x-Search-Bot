@@ -95,7 +95,9 @@ async def search(update: Update, context: CallbackContext) -> None:
         for i in range(0, min(5, len(results)), 1):
             response_text = format_results(results, i, i + 1)
             magnet_link = torrent_client.info(link=results[i]['link']).get('magnetLink', 'N/A')
-            keyboard = [[InlineKeyboardButton("Mirror to Seedr", callback_data=f"mirror_{magnet_link}")]]
+            identifier = f"mirror_{i}"
+            context.user_data[identifier] = magnet_link
+            keyboard = [[InlineKeyboardButton("Mirror to Seedr", callback_data=identifier)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(response_text, parse_mode="HTML", reply_markup=reply_markup)
         keyboard = [[InlineKeyboardButton("View All Results", callback_data="show_telegraph")]]
@@ -111,7 +113,11 @@ async def search(update: Update, context: CallbackContext) -> None:
 async def mirror_seedr_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
-    magnet_link = query.data.split("_", 1)[1]
+    identifier = query.data
+    magnet_link = context.user_data.get(identifier)
+    if not magnet_link:
+        await query.edit_message_text("Magnet link not found.")
+        return
     seedr_link = mirror_to_seedr(magnet_link)
     if seedr_link:
         await query.edit_message_text(f"Mirrored to Seedr! Access it here: {seedr_link}")
