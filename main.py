@@ -50,15 +50,31 @@ async def search(update: Update, context: CallbackContext) -> None:
     if not context.args:
         await update.message.reply_text("Please provide a search term. Usage: /search <query>")
         return
+
     query = ' '.join(context.args)
     results = await search_1337x_with_progress(update, context, query)
     
     if results:
         context.user_data['results'] = results
-        response_text = format_results(results, 0, 5)
+        response_text = ""
+        for i in range(0, len(results), 1):
+            result_text = format_results(results, i, i + 1)
+            if len(response_text) + len(result_text) > 4000:  # Send message if approaching character limit
+                await update.message.reply_text(response_text, parse_mode="HTML")
+                response_text = result_text
+            else:
+                response_text += result_text
+
+        if response_text:
+            await update.message.reply_text(response_text, parse_mode="HTML")
+
         keyboard = [[InlineKeyboardButton("View All Results", callback_data="show_telegraph")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(response_text, reply_markup=reply_markup, parse_mode="HTML")
+        await update.message.reply_text(
+            "Click below to view all search results.",
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
     else:
         await update.message.reply_text("No results found. Please try a different query.")
 
@@ -69,6 +85,7 @@ async def show_telegraph(update: Update, context: CallbackContext) -> None:
     if not results:
         await query.edit_message_text("No results available.")
         return
+
     full_text = "<br>".join(format_results(results, 0, len(results)).splitlines())
     telegraph_response = telegraph.create_page(
         title="Search Results",
