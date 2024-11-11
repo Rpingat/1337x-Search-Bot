@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 from py1337x import py1337x
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 torrent_client = py1337x(proxy='1337x.to', cache='py1337xCache', cacheTime=500)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+SEEDR_USERNAME = os.getenv('SEEDR_USERNAME')
+SEEDR_PASSWORD = os.getenv('SEEDR_PASSWORD')
 telegraph = Telegraph()
 telegraph.create_account(short_name="1337x_bot")
 
@@ -28,6 +31,39 @@ def format_results(results, start=0, end=5):
             "--------------------------------------\n\n"
         )
     return response_text
+
+def authenticate_seedr():
+    response = requests.post(
+        "https://www.seedr.cc/oauth/token",
+        data={
+            'grant_type': 'password',
+            'username': SEEDR_USERNAME,
+            'password': SEEDR_PASSWORD
+        }
+    )
+    if response.status_code == 200:
+        return response.json().get('access_token')
+    else:
+        logger.error("Failed to authenticate with Seedr.")
+        return None
+
+def mirror_to_seedr(magnet_link):
+    token = authenticate_seedr()
+    if token:
+        headers = {'Authorization': f'Bearer {token}'}
+        response = requests.post(
+            "https://www.seedr.cc/api/folder",
+            headers=headers,
+            data={'url': magnet_link}
+        )
+        if response.status_code == 200:
+            folder_id = response.json().get('id')
+            return f"https://www.seedr.cc/files/{folder_id}"
+        else:
+            logger.error("Failed to mirror to Seedr.")
+            return None
+    else:
+        return None
 
 async def search_1337x_with_progress(update: Update, context: CallbackContext, query: str):
     message = await update.message.reply_text("🔎 Starting search... 0%")
@@ -58,7 +94,10 @@ async def search(update: Update, context: CallbackContext) -> None:
         context.user_data['results'] = results
         for i in range(0, min(5, len(results)), 1):
             response_text = format_results(results, i, i + 1)
-            await update.message.reply_text(response_text, parse_mode="HTML")
+            magnet_link = torrent_client.info(link=results[i]['link']).get('magnetLink', 'N/A')
+            keyboard = [[InlineKeyboardButton("Mirror to Seedr", callback_data=f"mirror_{magnet_link}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(response_text, parse_mode="HTML", reply_markup=reply_markup)
         keyboard = [[InlineKeyboardButton("View All Results", callback_data="show_telegraph")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -68,6 +107,16 @@ async def search(update: Update, context: CallbackContext) -> None:
         )
     else:
         await update.message.reply_text("No results found. Please try a different query.")
+
+async def mirror_seedr_callback(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    magnet_link = query.data.split("_", 1)[1]
+    seedr_link = mirror_to_seedr(magnet_link)
+    if seedr_link:
+        await query.edit_message_text(f"Mirrored to Seedr! Access it here: {seedr_link}")
+    else:
+        await query.edit_message_text("Failed to mirror to Seedr. Please try again later.")
 
 async def show_telegraph(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -96,6 +145,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
+    application.add_handler(CallbackQueryHandler(mirror_seedr_callback, pattern="^mirror_"))
     application.add_handler(CallbackQueryHandler(show_telegraph, pattern="show_telegraph"))
     application.add_error_handler(error_handler)
     application.run_polling()
