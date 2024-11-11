@@ -23,8 +23,9 @@ def format_results(results, start=0, end=5):
         magnet_link = torrent_info.get('magnetLink', 'N/A')
         response_text += (
             f"🎬 <b>{idx}. {item['name']}</b>\n"
-            f"⚙️ Seeders: {item['seeders']} | Leechers: {item['leechers']}\n"
-            f"🔗 <code>{magnet_link}</code>\n\n"
+            f"    ⚙️ <b>Seeders:</b> {item['seeders']} | <b>Leechers:</b> {item['leechers']}\n"
+            f"    🔗 <code>{magnet_link}</code>\n\n"
+            "--------------------------------------\n\n"
         )
     return response_text
 
