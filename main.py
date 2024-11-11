@@ -53,21 +53,11 @@ async def search(update: Update, context: CallbackContext) -> None:
 
     query = ' '.join(context.args)
     results = await search_1337x_with_progress(update, context, query)
-    
     if results:
         context.user_data['results'] = results
-        response_text = ""
-        for i in range(0, len(results), 1):
-            result_text = format_results(results, i, i + 1)
-            if len(response_text) + len(result_text) > 4000:  # Send message if approaching character limit
-                await update.message.reply_text(response_text, parse_mode="HTML")
-                response_text = result_text
-            else:
-                response_text += result_text
-
-        if response_text:
+        for i in range(0, min(5, len(results)), 1):
+            response_text = format_results(results, i, i + 1)
             await update.message.reply_text(response_text, parse_mode="HTML")
-
         keyboard = [[InlineKeyboardButton("View All Results", callback_data="show_telegraph")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -82,14 +72,10 @@ async def show_telegraph(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     results = context.user_data.get('results', [])
-    if not results:
-        await query.edit_message_text("No results available.")
-        return
-
-    full_text = "<br>".join(format_results(results, 0, len(results)).splitlines())
+    full_text = format_results(results, 0, len(results))
     telegraph_response = telegraph.create_page(
         title="Search Results",
-        html_content=full_text
+        html_content=full_text.replace("\n", "<br>")
     )
     telegraph_link = f"https://telegra.ph/{telegraph_response['path']}"
     await query.edit_message_text(
@@ -105,6 +91,7 @@ def main() -> None:
     if TELEGRAM_TOKEN is None:
         logger.error("TELEGRAM_TOKEN environment variable is not set.")
         return
+
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("search", search))
