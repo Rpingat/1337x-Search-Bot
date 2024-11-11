@@ -10,6 +10,7 @@ from telegraph import Telegraph
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 torrent_client = py1337x(proxy='1337x.to', cache='py1337xCache', cacheTime=500)
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 telegraph = Telegraph()
@@ -51,18 +52,13 @@ async def search(update: Update, context: CallbackContext) -> None:
         return
     query = ' '.join(context.args)
     results = await search_1337x_with_progress(update, context, query)
+    
     if results:
         context.user_data['results'] = results
-        for i in range(0, min(5, len(results)), 1):
-            response_text = format_results(results, i, i + 1)
-            await update.message.reply_text(response_text, parse_mode="HTML")
+        response_text = format_results(results, 0, 5)
         keyboard = [[InlineKeyboardButton("View All Results", callback_data="show_telegraph")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "Click below to view all search results.",
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
+        await update.message.reply_text(response_text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         await update.message.reply_text("No results found. Please try a different query.")
 
@@ -70,10 +66,13 @@ async def show_telegraph(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     results = context.user_data.get('results', [])
-    full_text = format_results(results, 0, len(results))
+    if not results:
+        await query.edit_message_text("No results available.")
+        return
+    full_text = "<br>".join(format_results(results, 0, len(results)).splitlines())
     telegraph_response = telegraph.create_page(
         title="Search Results",
-        html_content=full_text.replace("\n", "<br>")
+        html_content=full_text
     )
     telegraph_link = f"https://telegra.ph/{telegraph_response['path']}"
     await query.edit_message_text(
